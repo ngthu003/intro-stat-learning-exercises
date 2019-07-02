@@ -1,0 +1,220 @@
+---
+title:  |
+        | ISL - Chapter 5 Lab Tutorials
+        | Resampling Methods
+subtitle: |
+          | An introduction to Statistical Learning, with Applications in R
+          | - G. James, D. Witten, T. Hastie, R. Tibshirani
+author: "Thu Nguyen"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document:
+    toc: true # table of content true
+    toc_depth: 2  # upto three depths of headings (specified by #, ## and ###)
+    number_sections: true  ## if you want number sections at each table header
+  html_document:
+    df_print: paged
+number_sections: yes
+geometry: margin=2cm
+---
+<style type="text/css">
+  .main-container {
+  max-width: 800px !important;
+  font-size: 18px;
+  }
+  code.r{
+    font-size: 18px;
+  }
+  pre {
+    font-size: 18px
+  }
+  h1.title {
+    font-size: 30px;
+    color: red;
+  }
+  h1 {
+    font-size: 24px;
+    color: blue;
+  }
+  h2 {
+    font-size: 18px;
+    color: blue;
+  }
+  h3 {
+    font-size: 12px;
+  }
+</style>
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+**Main Contents:**
+
+1.  Cross-Validation
+2.  The Bootstrap
+
+***
+
+\newpage
+
+# 5.3.  Lab: Cross-Validation and the Bootstrap {-}
+
+***
+
+## 5.3.1.  The Validation Set Approach {-}
+
+```{r}
+library(ISLR)
+attach(Auto)
+set.seed(1)
+train <- sample(392, 196)
+```
+
+Regression Models
+
+```{r}
+# Linear Regression model
+lm.fit <- lm(mpg ~ horsepower, data = Auto, subset = train)
+pol.1.mse <- round(mean((mpg - predict(lm.fit, Auto))[-train]^2),2)
+# Polynomial regression: power = 2
+lm.fit2 <- lm(mpg ~ poly(horsepower, 2), data = Auto, subset = train)
+pol.2.mse <- round(mean((mpg - predict(lm.fit2, Auto))[-train]^2),2)
+# Polynomial regression: power = 3
+lm.fit3 <- lm(mpg ~ poly(horsepower, 3), data = Auto, subset = train)
+pol.3.mse <- round(mean((mpg - predict(lm.fit3, Auto))[-train]^2),2)
+models <- c('Linear Regression', 'Polynomial Regression: power 2', 'Polynomial Regression: power 3')
+mses <- c(pol.1.mse, pol.2.mse, pol.3.mse)
+data.frame(Models = models, MSE = mses)
+```
+
+***
+
+\clearpage
+
+## 5.3.2.  Leave-One-Out Cross-Validation {-}
+
+To use \texttt{\color{blue}{cv.glm()}} from package `boot`.
+
+```{r}
+library(boot)                         
+# glm() for Linear Regression model instead of lm()
+glm.fit <- glm(mpg ~ horsepower, data = Auto)
+round(coef(glm.fit),2)
+```
+
+```{r}
+# Cross-validation
+cv.err <- cv.glm(Auto, glm.fit)
+print(paste0('Cross-Validation error: ', round(cv.err$delta[1],4), ', ', round(cv.err$delta[2],4)))
+```
+
+`cv.err` for Polynomial fit of degree 1,2,3,4,5
+
+```{r}
+cv.error <- rep(0,5)
+for (i in 1:5) {
+  glm.fit <- glm(mpg ~ poly(horsepower, i), data = Auto)
+  cv.error[i] <- cv.glm(Auto, glm.fit)$delta[1]
+}
+degrees <- 1:5
+data.frame(Polynomial_Regression_Degree = degrees, MSE = round(cv.error,2))
+```
+
+**Comment:** sharp drop in MSE from Linear to Quadratic but not much there after.
+
+***
+
+\clearpage
+
+## 5.3.3.  $k$-Fold Cross-Validation {-}
+
+```{r}
+set.seed(17)
+cv.error.10 <- rep(0, 10)
+for (i in 1:10) {
+  glm.fit <- glm(mpg ~ poly(horsepower, i), data = Auto)
+  # k = 10
+  cv.error.10[i] <- round(cv.glm(Auto, glm.fit, K = 10)$delta[1],2)
+}
+t(data.frame(Polynomial_Degree = 1:10, MSE = cv.error.10))
+```
+
+***
+
+\clearpage
+
+## 5.3.4.  The Bootstrap {-}
+
+To estimate the accuracy of a test-statistic, for example:
+
+$$ t = \frac{var(Y) - var(X)}{var(X) + var(Y) - 2\ cov(X,Y)} $$
+
+
+```{r}
+# fn to compute test statistic
+alpha.fn <- function(data, index) {
+  X <- data$X[index]
+  Y <- data$Y[index]
+  test.stat <- (var(Y) - cov(X,Y)) / (var(X) + var(Y) - 2*cov(X,Y))
+  return(test.stat)
+}
+p <- round(alpha.fn(Portfolio, 1:100),4)
+```
+
+$p$-value after *Bootstrapping* is `r p`.
+
+```{r}
+# Bootrapping
+set.seed(1)
+p <- round(alpha.fn( Portfolio, sample(100, 100, replace = T)), 4)
+```
+
+Alternatively, instead of `1:100`, we can use function `sample()`, giving a new bootstrapped $p$-value of `r p`.
+
+Bootrapping: \texttt{\color{blue}{boot()}} from package `boot`
+
+```{r}
+# boot() for bootstrapping, from 'boot' library
+boot(Portfolio, alpha.fn, R = 1000)
+```
+
+**Estimating the Accuracy of a Linear Regression Model**
+
+```{r}
+boot.fn <- function(data, index) {
+  return(coef(lm(mpg ~ horsepower, data = data, subset = index)))
+}
+round(boot.fn(Auto, 1:392),2)
+```
+
+Test-statistic = $\mu$
+
+```{r}
+set.seed(1)
+round(boot.fn(Auto, sample(392, 392, replace = T)),2)
+```
+
+Test-statistic = $SE$
+
+```{r}
+boot(Auto, boot.fn, 1000)
+```
+
+```{r}
+# Compare against Linear model
+summary(lm(mpg ~ horsepower, data = Auto))$coef
+```
+
+
+```{r}
+boot.fn <- function(data, index) {
+  coefficients(lm(mpg ~ horsepower + I(horsepower^2), data = data, subset = index))
+}
+set.seed(1)
+boot(Auto, boot.fn, 1000)
+summary(lm(mpg ~ horsepower + I(horsepower^2), data = Auto))$coef
+```
+
+***

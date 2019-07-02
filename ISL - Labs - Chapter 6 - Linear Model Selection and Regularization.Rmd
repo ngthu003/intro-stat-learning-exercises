@@ -1,0 +1,537 @@
+---
+title:  |
+        | ISL - Chapter 6 Lab Tutorials
+        | Linear Model Selection and Regularization
+subtitle: |
+          | An introduction to Statistical Learning, with Applications in R
+          | - G. James, D. Witten, T. Hastie, R. Tibshirani
+author: "Thu Nguyen"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document:
+    toc: true # table of content true
+    toc_depth: 2  # upto three depths of headings (specified by #, ## and ###)
+    number_sections: true  ## if you want number sections at each table header
+  html_document:
+    df_print: paged
+number_sections: yes
+geometry: margin=2cm
+---
+<style type="text/css">
+  .main-container {
+  max-width: 800px !important;
+  font-size: 18px;
+  }
+  code.r{
+    font-size: 18px;
+  }
+  pre {
+    font-size: 18px
+  }
+  h1.title {
+    font-size: 30px;
+    color: red;
+  }
+  h1 {
+    font-size: 24px;
+    color: blue;
+  }
+  h2 {
+    font-size: 18px;
+    color: blue;
+  }
+  h3 {
+    font-size: 12px;
+  }
+</style>
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+**Main Contents:**
+
+1.  Subset Selection
+2.  Shrinkage Methods
+3.  Dimension Reduction Methods
+4.  Considerations in High Dimensions
+
+***
+
+\newpage
+
+# 6.5.  Lab 1: Subset Selection Methods {-}
+
+***
+
+## 6.5.1.  Best Subset Selection {-}
+
+```{r}
+library(ISLR)
+# Hitters dataset from ISLR, and remove NA from Salary column
+Hitters <- na.omit(Hitters)
+print(paste0('Dimension after removing NA: ', dim(Hitters)))
+```
+
+**\texttt{\color{blue}{regsubsets()}} Best subset selection, from library `leaps`**
+
+```{r}
+# regsubsets(): Best subset selection, from library 'leaps'
+library(leaps)
+regfit.full <- regsubsets(Salary ~ ., data = Hitters)
+summary(regfit.full)
+```
+
+By default: regsubsets() only include up to 8 variables, to increase, specify \texttt{\color{blue}{nvmax = p}}, with $p$ variables
+
+```{r}
+regfit.full <- regsubsets(Salary ~ ., data = Hitters, nvmax = 19)
+reg.summary <- summary(regfit.full)
+mes <- 'Available attributes of model'
+print(cat(mes, '\n', names(reg.summary), '\n'))
+```
+
+```{r}
+# R^2
+round(reg.summary$rsq, 4)
+```
+
+**Interpretation:** 1 var: $R^2 = .32$, 2 vars: $R^2 = .425$, ... 19 vars: $R^2 = .546$
+
+**Plot**
+
+```{r fig.height=3,fig.width=8,fig.align='center'}
+# Plot
+par(mfrow=c(2,2)); par(mar=c(3,5,1,1))
+# RSS
+plot(reg.summary$rss, xlab = 'Number of Variables', ylab = 'RSS', type = 'l')
+# Adjusted R^2
+plot(reg.summary$adjr2, xlab = 'Number of Variables', ylab = 'Adjusted RSq', type = 'l')
+# Max(Adjusted R^2)
+points(11, reg.summary$adjr2[11], col = 'red', cex = 2, pch = 20)
+
+# C_p
+plot(reg.summary$cp, xlab = 'Number of Variables', ylab = 'Cp', type = 'l')
+points(10, reg.summary$cp[10], col = 'red', cex = 2, pch = 20)
+
+# BIC
+plot(reg.summary$bic, xlab = 'Number of Variables', ylab = 'BIC', type = 'l')
+points(6, reg.summary$bic[6], col = 'red', cex = 2, pch = 20)
+```
+
+```{r}
+attr.names <- c('Max(Adjusted R^2)', 'Min(Cp)', 'Min(BIC')
+attr.values <- c(which.max(reg.summary$adjr2), which.min(reg.summary$cp), which.min(reg.summary$bic))
+data.frame(Attributes = attr.names, Number_of_Variables = attr.values)
+```
+
+```{r fig.height=4,fig.width=6}
+# Plot with labelled best variables
+# par(mfrow=c(1,1))
+# plot(regfit.full, scale = 'r2')
+# plot(regfit.full, scale = 'adjr2')
+# plot(regfit.full, scale = 'Cp')
+# plot(regfit.full, scale = 'bic')
+```
+
+**Interpretation:**
+
+*  The top row of each plot contains a black square for each variable selected according to the optimal model. For instance, we see that several models share a `BIC` close to $-150$. However, the model with the lowest `BIC` is the 6-variable model that contains only `AtBat`, `Hits`, `Walks`, `CRBI`, `DivisionW`, and `PutOuts`.
+
+```{r}
+mes <- 'Coefficients of model with 6 var'
+print(cat(mes, '\n', round(coef(regfit.full, 6),4), '\n'))
+round(coef(regfit.full, 6),4)
+```
+
+***
+
+\clearpage
+
+## 6.5.2.  Forward and Backward Stepwise Selection {-}
+
+>  to specify method: \texttt{\color{blue}{method = 'forward/backward'}}
+
+**Forward**
+
+```{r}
+regfit.fwd <- regsubsets(Salary ~ ., data = Hitters, nvmax = 19, method = 'forward')
+# summary(regfit.fwd)
+```
+
+**Backward**
+
+```{r}
+regfit.bwd <- regsubsets(Salary ~ ., data = Hitters, nvmax = 19, method = 'backward')
+# summary(regfit.bwd)
+```
+
+**Comment:**
+
+*  For best models with 1-6 vars, both are the same
+*  7 vars: Forward and Backward return different models
+
+**Full model**
+```{r}
+round(coef(regfit.full, 7),2)
+```
+
+**Forward Stepwise model**
+```{r}
+round(coef(regfit.fwd, 7),2)
+```
+
+**Backward Stepwise model**
+```{r}
+round(coef(regfit.bwd, 7),2)
+```
+
+***
+
+\clearpage
+
+## 6.5.3.  Choosing among Models using Validation Set Approach and CV {-}
+
+```{r}
+# Split into train and test sets
+set.seed(1)
+train <- sample(c(TRUE, FALSE), nrow(Hitters), rep = TRUE)
+test <- (!train)
+# Best subset model
+regfit.best <- regsubsets(Salary ~ ., data = Hitters[train,], nvmax = 19)
+# Validation set test error
+test.mat <- model.matrix(Salary ~ ., data = Hitters[test,])
+# Test set MSE
+val.errors <- c()
+for (i in 1:19) {
+  coefi <- coef(regfit.best, id = i)
+  pred <- test.mat[, names(coefi)]%*%coefi
+  val.errors[i] <- round(mean((Hitters$Salary[test] - pred)^2), 0)
+}
+```
+
+MSE on test set for different number of variables, arranged by row.
+```{r}
+matrix(val.errors, ncol = 5, byrow = T)
+```
+
+
+**Model with the best MSE**
+
+```{r}
+# Model with min(MSE)
+mes <- 'The number of variables giving lowest MSE on test set: '
+print(paste0(mes, which.min(val.errors)))
+coef(regfit.best, which.min(val.errors))
+```
+
+**`predict.regsubsets()` function, and $10$-fold Cross-Validation**
+
+```{r}
+# predict fn, by hand
+predict.regsubsets <- function(object, newdata, id, ...) {
+  form <- as.formula(object$call[[2]])
+  mat <- model.matrix(form, newdata)
+  coefi <- coef(object, id = id)
+  xvars <- names(coefi)
+  mat[,xvars]%*%coefi
+}
+
+# 10-fold Cross-Validation
+k <- 10
+set.seed(1)
+folds <- sample(1:k, nrow(Hitters), replace = TRUE)
+cv.errors <- matrix(NA, k, 19, dimnames = list(NULL, paste(1:19)))
+```
+
+**Average MSE on test set for each number of variables after 10-fold CV**
+
+```{r}
+# Steps: prediction -> test set errors
+# Loop 1: j for each fold
+for (j in 1:k) {
+  best.fit <- regsubsets(Salary ~ ., data = Hitters[folds != j,], nvmax = 19)
+  # Loop 2: i for each variable
+  for (i in 1:19) {
+    pred <- predict(best.fit, Hitters[folds == j,], id = i)
+    cv.errors[j,i] <- mean( (Hitters$Salary[folds == j] - pred)^2 )
+  }
+}
+mean.cv.errors <- round(apply(cv.errors, 2, mean),0)
+mean.cv.errors
+```
+
+```{r fig.height=2,fig.width=4,fig.align='center'}
+par(mfrow = c(1,1)); par(mar=c(2,4,1,1))
+plot(mean.cv.errors, type = 'b')
+```
+
+**Comment:** based on plot, best model has 11 variables
+
+**Coefficients for the model**
+
+```{r}
+reg.best <- regsubsets(Salary ~ ., data = Hitters, nvmax = 19)
+round(coef(reg.best, 11),2)
+```
+
+***
+
+\clearpage
+
+# 6.6.  Lab 2: Ridge Regression and the Lasso {-}
+
+***
+
+\texttt{\color{blue}{glmnet()}} from package `glmnet`, for Ridge Regression: \texttt{\color{blue}{alpha = 0}}, Lasso: \texttt{\color{blue}{alpha = 1}}, also, by default, `glmnet()` standardizes the variables automatically.
+
+```{r}
+library(glmnet)
+# Rmb to remove na/missing values
+# Convert from data.frame to matrix, also, categorical var -> dummy var
+x <- model.matrix(Salary ~ ., Hitters)[,-1]
+y <- Hitters$Salary
+```
+
+## 6.6.1.  Ridge Regression {-}
+
+```{r}
+# grid for range of values for lambda
+grid <- 10^seq(10, -2, length = 100)
+# Ridge Regression model
+ridge.mod <- glmnet(x, y, alpha = 0, lambda = grid)
+# Result is a 20x100 matrix of predictors' coef. depending on lambda
+mes <- 'Dimension of result model:'
+print(paste(mes, dim(coef(ridge.mod))[1], 'x', dim(coef(ridge.mod))[2]))
+```
+
+```{r}
+mes <- 'Available attributes from the model:'
+print(cat(mes, '\n', names(ridge.mod), '\n'))
+```
+
+**Example:**
+
+```{r}
+# Ex: at index 50, lambda = 11,498
+lambda <- ridge.mod$lambda[50]
+# l^2 norm
+l2 <- round(sqrt(sum(coef(ridge.mod)[-1,50]^2)),2)
+```
+
+$$ \text{At } \lambda = 11,497.57, l_2 \text{ norm } = `r l2`, \text{ and the coefficients are: }$$
+
+```{r}
+coef(ridge.mod)[,50]
+```
+
+```{r}
+# Ex: at index 50, lambda = 11,498
+lambda <- ridge.mod$lambda[60]
+# l^2 norm
+l2 <- round(sqrt(sum(coef(ridge.mod)[-1,60]^2)),2)
+```
+
+Compare against different $\lambda$:
+
+$$ \text{At } \lambda = `r 705.48`, l_2 \text{ norm } = `r l2`, \text{ and the coefficients are: }$$
+
+```{r}
+coef(ridge.mod)[,60]
+```
+
+**Predict**
+
+```{r}
+# predict()
+predict(ridge.mod, s = 50, type = 'coefficients')[1:20,]
+```
+
+***
+
+```{r}
+# Split into train and test sets
+set.seed(1)
+train <- sample(1:nrow(x), nrow(x)/2)
+test <- (-train)
+y.test <- y[test]
+```
+
+**Models**
+
+```{r}
+ridge.mod <- glmnet(x[train,], y[train], alpha = 0, lambda = grid, thresh = 1e-12)
+# lambda = s = 4, to specify newdata: newx = x[test,]
+ridge.pred <- predict(ridge.mod, s = 4, newx = x[test,])
+# MSE
+mse.1 <- mean((ridge.pred - y.test)^2)
+# MSE for model of only the intercept and no var.: horizontal line y = ybar
+mse.2 <- mean((mean(y[train]) - y.test)^2)
+# lambda = 10^10 aka very large
+ridge.pred <- predict(ridge.mod, s = 1e10, newx = x[test,])
+# MSE
+mse.3 <- mean((ridge.pred - y.test)^2)
+# lambda = 0 <=> Least Squares Regression <=> lm()
+ridge.pred <- predict(ridge.mod, s = 0, newx = x[test,])
+# MSE
+mse.4 <- mean((ridge.pred - y.test)^2)
+
+attr.names <- c('lambda = 4', 'Intercept only', 'lambda = 10^10', 'lambda = 0')
+attr.values <- c(mse.1, mse.2, mse.3, mse.4)
+data.frame(Models = attr.names, MSE = attr.values)
+```
+
+**Cross-Validation**
+
+```{r fig.height=3,fig.width=6}
+par(mar=c(4,4,2,1))
+# Cross-Validation: cv.glmnet()
+set.seed(1)
+cv.out <- cv.glmnet(x[train,], y[train], alpha = 0)
+plot(cv.out)
+```
+
+```{r}
+# Best lambda <=> lambda with min(MSE)
+bestlam <- round(cv.out$lambda.min,2)
+# predict() and test set MSE based on best lambda
+ridge.pred <- predict(ridge.mod, s = bestlam, newx = x[test,])
+mse <- round(mean((ridge.pred - y.test)^2),0)
+```
+
+From Cross-Validation under **Ridge Regression**, $\lambda$ with the lowest MSE on test set is `r bestlam`, with $MSE = `r mse`$.
+
+***
+
+```{r}
+# Model on the entire dataset
+out <- glmnet(x, y, alpha = 0)
+predict(out, type = 'coefficients', s = bestlam)[1:20,]
+```
+
+***
+
+\clearpage
+
+## 6.6.2.  The Lasso {-}
+
+```{r fig.height=3,fig.width=6,fig.align='center'}
+par(mar=c(4,4,2,1))
+# glmnet() with alpha = 1
+lasso.mod <- glmnet(x[train,], y[train], alpha = 1, lambda = grid)
+plot(lasso.mod)
+```
+
+**Cross-Validation: \texttt{\color{blue}{cv.glmnet()}}**
+
+```{r fig.height=2,fig.width=4,fig.align='center'}
+# Cross-Validation: cv.glmnet()
+par(mar=c(4,4,2,1))
+set.seed(1)
+cv.out <- cv.glmnet(x[train,], y[train], alpha = 1)
+plot(cv.out)
+```
+
+```{r}
+# Best lambda <=> lambda with min(MSE)
+bestlam <- cv.out$lambda.min
+# predict() and test set MSE based on best lambda
+lasso.pred <- predict(lasso.mod, s = bestlam, newx = x[test,])
+mse <- mean((lasso.pred - y.test)^2)
+```
+
+From Cross-Validation under **Lasso**, $\lambda$ with the lowest MSE on test set is `r bestlam`, with $MSE = `r mse`$.
+
+```{r}
+# Model on the entire dataset
+out <- glmnet(x, y, alpha = 1, lambda = grid)
+predict(out, type = 'coefficients', s = bestlam)[1:20,]
+```
+
+**Comment:**
+
+*  Lasso and Ridge regression models' MSE are similar
+*  Lasso model: 12 vars have coef = 0 => Use fewer vars => Easier to interpret
+
+***
+
+\clearpage
+
+# 6.7.  Lab 3: PCR and PLS Regression {-}
+
+## 6.7.1.  Principal Components Regression {-}
+
+>  \texttt{\color{blue}{pcr()}} from `pls` package, >  \texttt{\color{blue}{scale = TRUE}} to normalize data, >  \texttt{\color{blue}{validation = 'CV'}} for $10$-fold Cross Validation by default.
+
+```{r fig.height=2,fig.width=4,fig.align='center'}
+# `pcr()`` fn from `pls`` package
+library(pls)
+par(mar=c(2,4,2,1))
+set.seed(2)
+pcr.fit <- pcr(Salary ~ ., data = Hitters, scale = TRUE, validation = 'CV')
+# summary(pcr.fit)
+# Plot: `validationplot()`, to specify MSE: `val.type = 'MSEP'`
+validationplot(pcr.fit, val.type = 'MSEP')
+```
+
+**Comment:** 
+
+*  printed are RMSE, to get MSE = RMSE^2
+*  CV MSE is smallest when $M = 16$, not much different from $M = 19 \iff$ no reduction
+*  \texttt{\color{blue}{summary()}} shows Percentage of Variance Explained
+
+```{r fig.height=2,fig.width=4,fig.align='center'}
+par(mar=c(2,4,2,1))
+# Model from train and test sets
+set.seed(1)
+pcr.fit <- pcr(Salary ~ ., data = Hitters, subset = train, scale = TRUE, validation = 'CV')
+validationplot(pcr.fit, val.type = 'MSEP')
+```
+
+
+```{r}
+# Prediction, based on M = 7
+pcr.pred <- predict(pcr.fit, x[test,], ncomp = 7)
+mean((pcr.pred - y.test)^2)
+```
+
+**Comment:** MSE is competitive vs. Ridge Regression and the Lasso, However, model from PCR is more difficult to interpret.
+
+```{r}
+# Fit model on full data set, using M = 7
+pcr.fit <- pcr( y ~ x, scale = TRUE, ncomp = 7)
+# summary(pcr.fit)
+```
+
+
+## 6.7.2.  Partial Least Squares {-}
+
+>  \texttt{\color{blue}{plsr()}} from `pls` package
+
+```{r fig.height=2,fig.width=4,fig.align='center'}
+par(mar=c(2,4,2,1))
+set.seed(1)
+pls.fit <- plsr(Salary ~ ., data = Hitters, subset = train, scale = TRUE, validation = 'CV')
+#summary(pls.fit)
+# Plot
+validationplot(pls.fit, val.type = 'MSEP')
+```
+
+```{r}
+pls.pred <- predict(pls.fit, x[test,], ncomp = 2)
+mean((pls.pred - y.test)^2)
+```
+
+**Comment:** MSE is comparable but slightly higher than Ridge Regression, the Lasso, and PCR
+
+```{r}
+# Fit model on full data set, using M = 2
+pls.fit <- plsr(Salary ~ ., data = Hitters, scale = TRUE, ncomp = 2)
+summary(pls.fit)
+```
+
+**Comment:** PLSR model with 2 components explains $46.40 \%$ variance in Salary while PCR needs 7 components to explain $46.69 \%%
+
+**Reason:** PCR only attemps to maximize variance explained in the predictors while PLSR searches for Directions that explain the variance in both predictors and response.
+

@@ -1,0 +1,298 @@
+---
+title:  |
+        | ISL - Chapter 5 Exercises
+        | Resampling Methods
+subtitle: |
+          | An introduction to Statistical Learning, with Applications in R
+          | - G. James, D. Witten, T. Hastie, R. Tibshirani
+author: "Thu Nguyen"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document:
+    toc: true # table of content true
+    toc_depth: 2  # upto three depths of headings (specified by #, ## and ###)
+    number_sections: true  ## if you want number sections at each table header
+  html_document:
+    df_print: paged
+number_sections: yes
+geometry: margin=2cm
+---
+<style type="text/css">
+  .main-container {
+  max-width: 800px !important;
+  font-size: 18px;
+  }
+  code.r{
+    font-size: 18px;
+  }
+  pre {
+    font-size: 18px
+  }
+  h1.title {
+    font-size: 30px;
+    color: red;
+  }
+  h1 {
+    font-size: 24px;
+    color: blue;
+  }
+  h2 {
+    font-size: 18px;
+    color: blue;
+  }
+  h3 {
+    font-size: 12px;
+  }
+</style>
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+options(scipen=999)
+par(mar=c(0,0,1,0))
+```
+
+# Exercise 5 {-}
+
+In Chapter $4$, we used logistic regression to predict the probability of `default` using `income` and `balance` on the `Default` data set. We will now estimate the test error of this logistic regression model using the validation set approach. Do not forget to set a random seed before beginning your analysis.
+
+(a)  Fit a logistic regression model that uses `income` and `balance` to predict `default`.
+(b)  Using the validation set approach, estimate the test error of this
+model. In order to do this, you must perform the following steps:
+     i.  Split the sample set into a training set and a validation set.
+     ii.   Fit a multiple logistic regression model using only the training observations.
+     iii.  Obtain a prediction of default status for each individual in the validation set by computing the posterior probability of default for that individual, and classifying the individual to the `default` category if the posterior probability is greater than $0.5$.
+     iv.  Compute the validation set error, which is the fraction of the observations in the validation set that are misclassified.
+(c)  Repeat the process in (b) three times, using three different splits of the observations into a training set and a validation set. Comment on the results obtained.
+(d)  Now consider a logistic regression model that predicts the probability of `default` using `income`, `balance`, and a dummy variable for `student.` Estimate the test error for this model using the validation set approach. Comment on whether or not including a dummy variable for `student` leads to a reduction in the test error rate.
+
+***
+
+**(a)  Logistic Regression:  `default` ~ `income` + `balance`**
+
+```{r}
+library(ISLR)
+attach(Default)
+glm.fits <- glm(default ~ income + balance, data = Default, family = 'binomial')
+summary(glm.fits)
+```
+
+***
+
+**(b)  Validation set approach**
+
+```{r}
+n <- nrow(Default)
+set.seed(1)
+# (i): Split into train and test, 70% training, 30% test
+train <- sample(n, round(n*.7,0))
+# (ii): GLM model on train set
+glm.fits <- glm(default ~ income + balance, data = Default, family = 'binomial', subset = train)
+# (iii): Prediction on test set
+glm.probs <- predict(glm.fits, newdata = Default, type = 'response')[-train]
+k <- nrow(Default) - length(train)
+glm.pred <- rep('No', k)
+glm.pred[glm.probs > .5] <- 'Yes'
+# (iv): Test set error
+default.test <- Default[-train,]$default
+print(paste('Validation set MSE:', mean(glm.pred != default.test)))
+```
+
+***
+
+**(c)  Repeating Validation set approaches**
+
+```{r}
+set.seed(1)
+valid.set.3 <- c()
+for (i in 1:3) {
+  set.seed(i*7)
+  # (i): Split into train and test
+  train <- sample(n, round(n*.7,0))
+  # (ii): GLM model on train set
+  glm.fits <- glm(default ~ income + balance, data = Default, family = 'binomial', subset = train)
+  # (iii): Prediction on test set
+  glm.probs <- predict(glm.fits, newdata = Default, type = 'response')[-train]
+  k <- nrow(Default) - length(train)
+  glm.pred <- rep('No', k)
+  glm.pred[glm.probs > .5] <- 'Yes'
+  # (iv): Test set error
+  default.test <- Default[-train,]$default
+  valid.set.3[i] <- round(mean(glm.pred != default.test),4)
+}
+valid.set.3
+```
+
+***
+
+**(d)  Logistic Regression:  `default` ~ `income` + `balance` + `studnent`**
+
+```{r}
+valid.set.all.3 <- c()
+for (i in 1:3) {
+  set.seed(i*7)
+  # (i): Split into train and test
+  train <- sample(n, round(n*.7,0))
+  # (ii): GLM model on train set
+  glm.fits <- glm(default ~ income + balance + student, 
+                  data = Default, family = 'binomial', subset = train)
+  # (iii): Prediction on test set
+  glm.probs <- predict(glm.fits, newdata = Default, type = 'response')[-train]
+  k <- nrow(Default) - length(train)
+  glm.pred <- rep('No', k)
+  glm.pred[glm.probs > .5] <- 'Yes'
+  # (iv): Test set error
+  default.test <- Default[-train,]$default
+  valid.set.all.3[i] <- round(mean(glm.pred != default.test),4)
+}
+valid.set.all.3
+data.frame('Income_Balance' = valid.set.3,
+           'Income_Balance_Student' = valid.set.all.3)
+```
+
+**Comment:** including `student` does not appear to significantly reduce $MSE$.
+
+$\hfill \blacksquare$
+
+\clearpage
+
+# Exercise 6 {-}
+
+We continue to consider the use of a logistic regression model to predict the probability of `default` using `income` and `balance` on the `Default` data set. In particular, we will now compute estimates for the standard errors of the `income` and `balance` logistic regression coefficients in two different ways: (1) using the bootstrap, and (2) using the standard formula for computing the standard errors in the `glm()` function. Do not forget to set a random seed before beginning your analysis.
+
+(a)  Using the `summary()` and `glm()` functions, determine the estimated standard errors for the coefficients associated with `income` and `balance` in a multiple logistic regression model that uses both predictors.
+(b)  Write a function, `boot.fn()`, that takes as input the `Default` data set as well as an index of the observations, and that outputs the coefficient estimates for `income` and `balance` in the multiple logistic regression model.
+(c)  Use the `boot()` function together with your `boot.fn()` function to estimate the standard errors of the logistic regression coefficients for `income` and `balance`.
+(d)  Comment on the estimated standard errors obtained using the `glm()` function and using your bootstrap function.
+
+***
+
+**(a)  Estimates of the standard errors of the coefficients by a logistic regression**
+
+```{r}
+glm.fits <- glm(default ~ income + balance, data = Default, family = 'binomial')
+summary(glm.fits)
+```
+
+From the summary above:
+
+*  `income`: $SE$ for coefficient: $0.000004985$
+*  `balance`: $SE$ for coefficient: $0.000227373$
+
+***
+
+**(b)  Bootstrapping the coefficient estimates**
+
+```{r}
+set.seed(1)
+boot.fn <- function(data, index) {
+  return(coef(glm.fits <- glm(default ~ income + balance, data = data, subset = index, family = 'binomial')))
+}
+boot.fn(Default, sample(nrow(Default), nrow(Default), replace = T))
+```
+
+***
+
+**(c)  Bootstrapping the standard errors of the coefficients**
+
+```{r}
+library(boot)
+set.seed(1)
+boot(Default, boot.fn, 1000)
+```
+
+From the summary above, after \textit{Bootstrapping}:
+
+*  `income`: $SE$ for coefficient: $0.000004582525$
+*  `balance`: $SE$ for coefficient: $0.000226795468$
+
+***
+
+**(d)  Comparison of estimated standard errors**
+
+```{r}
+var <- c('income', 'balance')
+glm.se <- c(0.000004985, 0.000227373)
+boot.se <- c(0.000004582525, 0.000226795468)
+data.frame(Variables = var, GLM = glm.se, Bootstrap = boot.se)
+```
+
+$\hfill \blacksquare$
+
+\clearpage
+
+# Exercise 7 {-}
+
+In Sections 5.3.2 and 5.3.3, we saw that the `cv.glm()` function can be used in order to compute the LOOCV test error estimate. Alternatively, one could compute those quantities using just the `glm()` and `predict.glm()` functions, and a for loop. You will now take this approach in order to compute the LOOCV error for a simple logistic regression model on the `Weekly` data set. Recall that in the context of classification problems, the LOOCV error is given in (5.4).
+
+(a)  Fit a logistic regression model that predicts `Direction` using `Lag1` and `Lag2`.
+(b)  Fit a logistic regression model that predicts `Direction` using `Lag1` and `Lag2` using all but the first observation.
+(c)  Use the model from (b) to predict the direction of the first observation. You can do this by predicting that the first observation will go up if P(`Direction="Up"|Lag1, Lag2`) > 0.5. Was this observation correctly classified?
+(d)  Write a for loop from $i = 1$ to $i = n$, where $n$ is the number of observations in the data set, that performs each of the following steps:
+     i.  Fit a logistic regression model using all but the ith observation to predict `Direction` using `Lag1` and `Lag2`.
+     ii.  Compute the posterior probability of the market moving up for the $i^{th}$ observation.
+     iii.  Use the posterior probability for the $i^{th}$ observation in order to predict whether or not the market moves up.
+     iv.  Determine whether or not an error was made in predicting the direction for the $i^{th}$ observation. If an error was made, then indicate this as a $1$, and otherwise indicate it as a $0$.
+(e)  Take the average of the $n$ numbers obtained in (d)iv in order to obtain the LOOCV estimate for the test error. Comment on the results.
+
+***
+
+**(a)  Logistic Regression on all observations: `Direction` ~ `Lag1` + `Lag2`**
+
+```{r}
+attach(Weekly)
+glm.fits.all <- glm(Direction ~ Lag1 + Lag2, data = Weekly, family = binomial)
+glm.probs.all <- predict(glm.fits, data = Weekly, type = 'response')
+summary(glm.fits.all)
+```
+
+***
+
+**(b)  Logistic Regression on all observations but the $1^{th}$ observation: `Direction` ~ `Lag1` + `Lag2`**
+
+```{r}
+glm.fits.b <- glm(Direction ~ Lag1 + Lag2, data = Weekly[-1,], family = binomial)
+glm.probs.b <- predict(glm.fits.b, data = Weekly[-1,], type = 'response')
+summary(glm.fits.b)
+```
+
+***
+
+**(c)  Model prediction at threshold $.5$**
+
+```{r}
+prob <- predict(glm.fits.b, newdata = Weekly[1,], type = 'response')
+pred <- ifelse(prob > .5, 'Up', 'Down')
+print(paste0('Prediction: ', pred, '; Correct prediction? ', pred == Weekly$Direction[1]))
+```
+
+***
+
+**(d)  \textit{LOOCV} for each $i = 1,2,\dots,n$**
+
+```{r}
+n <- nrow(Weekly)
+loocv <- c()
+for (i in 1:n) {
+  glm.fits.b <- glm(Direction ~ Lag1 + Lag2, data = Weekly[-i,], family = binomial)
+  prob <- predict(glm.fits.b, newdata = Weekly[i,], type = 'response')
+  loocv[i] <- ifelse(prob > .5, 'Up', 'Down') == Weekly$Direction[i]
+}
+```
+
+***
+
+**(e)  Accuracy of \textit{LOOCV}**
+
+```{r}
+loocv <- mean(loocv)
+baseline <- table(Weekly$Direction)[2]/n
+data.frame(Model = c('LOOCV', 'Baseline'), Accuracy = c(loocv, baseline))
+```
+
+**Comment:** \textit{LOOCV} does not appear to have effects on the accuracy: the prediction accuracy is the same as the baseline: by predicting the most common `Direction: Up`.
+
+$\hfill \blacksquare$
+
+\clearpage
+
