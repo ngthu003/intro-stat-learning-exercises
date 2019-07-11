@@ -1,0 +1,348 @@
+---
+title:  |
+        | ISL - Chapter 7 Exercises
+        | Moving Beyond Linearity
+subtitle: |
+          | An introduction to Statistical Learning, with Applications in R
+          | - G. James, D. Witten, T. Hastie, R. Tibshirani
+author: "Thu Nguyen"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document:
+    toc: true # table of content true
+    toc_depth: 2  # upto three depths of headings (specified by #, ## and ###)
+    number_sections: true  ## if you want number sections at each table header
+  html_document:
+    df_print: paged
+number_sections: yes
+geometry: margin=1.5cm
+---
+<style type="text/css">
+  .main-container {
+  max-width: 800px !important;
+  font-size: 18px;
+  }
+  code.r{
+    font-size: 18px;
+  }
+  pre {
+    font-size: 18px
+  }
+  h1.title {
+    font-size: 30px;
+    color: red;
+  }
+  h1 {
+    font-size: 24px;
+    color: blue;
+  }
+  h2 {
+    font-size: 18px;
+    color: blue;
+  }
+  h3 {
+    font-size: 12px;
+  }
+</style>
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+options(scipen=999, width = 1000)
+par(mar=c(0,0,1,0))
+```
+
+```{r}
+library(ISLR)
+library(boot)
+```
+
+
+# Exercise 6 {-}
+
+In this exercise, you will further analyze the `Wage` data set considered throughout this chapter.
+
+(a)  Perform polynomial regression to predict `wage` using `age`. Use cross-validation to select the optimal degree $d$ for the polynomial. What degree was chosen, and how does this compare to the results of hypothesis testing using ANOVA? Make a plot of the resulting polynomial fit to the data.
+(b)  Fit a step function to predict `wage` using `age`, and perform cross-validation to choose the optimal number of cuts. Make a plot of the fit obtained.
+
+***
+
+**(a)  Polynomial regression with $10$-fold cross-validation**
+
+```{r}
+attach(Wage)
+set.seed(1)
+cv.error.10 <- rep(0, 10)
+for (i in 1:10) {
+  fit <- glm(wage ~ poly(age, i), data = Wage)
+  cv.error.10[i] <- round(cv.glm(Wage, fit, K = 10)$delta[1], 2)
+}
+cv.deg <- which.min(cv.error.10)
+t(data.frame(Degree = 1:10, MSE = cv.error.10))
+```
+
+As seen from the summary table of MSE on the entire set, a polynomial of degree `r cv.deg` returns a best fit.
+
+```{r fig.height=3, fig.width=6, fig.align='center'}
+par(mar=c(4,4,1.5,.5))
+agelims <- range(age)
+age.grid <- seq(agelims[1], agelims[2])
+fit <- glm(wage ~ poly(age, 4), data = Wage)
+pred <- predict(fit, newdata = list(age = age.grid))
+plot(age, wage, xlim = agelims, cex = .5, col = 'darkgrey')
+title('Degree-4 Polynomial')
+lines(age.grid, pred, lwd = 2, col = 'blue')
+```
+
+***
+
+**(b)  Step function with $10$-fold cross-validation**
+
+```{r}
+set.seed(1)
+cv.error.10 <- rep(0, 10)
+for (i in 2:10) {
+  Wage$temp <- cut(age, i)
+  fit <- glm(wage ~ temp, data = Wage)
+  cv.error.10[i] <- cv.glm(Wage, fit, K = 10)$delta[1]
+}
+cv.deg <- which.min(cv.error.10[-1])
+t(data.frame(Step_cut = 2:11, MSE = cv.error.10))
+```
+
+As seen from the summary table of MSE on the entire set, a step function with `r cv.deg` cuts returns a best fit.
+
+```{r fig.height=3, fig.width=6, fig.align='center'}
+par(mar=c(4,4,1.5,.5))
+fit <- glm(wage ~ cut(age, cv.deg), data = Wage)
+pred <- predict(fit, newdata = list(age = age.grid))
+plot(age, wage, xlim = agelims, cex = .5, col = 'darkgrey')
+title('Step function with 7 cuts')
+lines(age.grid, pred, lwd = 2, col = 'blue')
+```
+
+$\hfill\blacksquare$
+
+\clearpage
+
+# Exercise 9 {-}
+
+This question uses the variables `dis` (the weighted mean of distances to five Boston employment centers) and `nox` (nitrogen oxides concentration in parts per 10 million) from the `Boston` data. We will treat `dis` as the predictor and nox as the response.
+
+(a)  Use the `poly()` function to fit a cubic polynomial regression to predict `nox` using `dis.` Report the regression output, and plot the resulting data and polynomial fits.
+(b)  lot the polynomial fits for a range of different polynomial degrees (say, from 1 to 10), and report the associated residual sum of squares.
+(c)  Perform cross-validation or another approach to select the optimal degree for the polynomial, and explain your results.
+(d)  Use the `bs()` function to fit a regression spline to predict `nox` using `dis`. Report the output for the fit using four degrees of freedom. How did you choose the knots? Plot the resulting fit.
+(e)  Now fit a regression spline for a range of degrees of freedom, and plot the resulting fits and report the resulting RSS. Describe the results obtained.
+(f)  Perform cross-validation or another approach in order to select the best degrees of freedom for a regression spline on this data. Describe your results
+
+***
+
+**(a)  Polynomial regression of `nox ~ poly(dis, 3)`**
+
+```{r}
+library(MASS)
+attach(Boston)
+dislims <- range(dis)
+dis.grid <- seq(dislims[1], dislims[2])
+(fit <- glm(nox ~ poly(dis, 3), data = Boston))
+```
+
+
+```{r fig.height=2, fig.width=6, fig.align='center'}
+par(mar=c(4,4,1.5,.5))
+pred <- predict(fit, newdata = list(dis = dis.grid))
+plot(dis, nox, xlim = dislims, cex = .5, col = 'darkgrey')
+title('Degree-3 Polynomial')
+lines(dis.grid, pred, lwd = 2, col = 'blue')
+```
+
+***
+
+**(b)  Polynomial regression of degree in $1:10$**
+
+```{r}
+mse <- rep(0, 10)
+for (i in 1:10) {
+  fit <- glm(nox ~ poly(dis, i), data = Boston)
+  pred <- predict(fit, newdata = list(dis = dis.grid))
+  mse[i] <- round(mean((pred - nox)^2),4)
+}
+mse.deg <- which.min(cv.error.10)
+t(data.frame(Degree = 1:10, MSE = mse))
+```
+
+As seen from the summary table of MSE on the entire set, a polynomial of degree `r mse.deg` returns a best fit.
+
+```{r fig.height=2, fig.width=6, fig.align='center'}
+par(mar=c(4,4,.5,.5))
+library(RColorBrewer)
+mycols <- colorRampPalette(brewer.pal(9,'Blues'))(30)
+plot(dis, nox, xlim = dislims, cex = .5, col = 'darkgrey')
+for (i in 1:10) {
+  fit <- glm(nox ~ poly(dis, i), data = Boston)
+  pred <- predict(fit, newdata = list(dis = dis.grid))
+  lines(dis.grid, pred, lwd = 2, col = mycols[3*i])
+}
+```
+
+***
+
+**(c)  Polynomial regression with $10$-fold cross-validation**
+
+```{r}
+set.seed(1)
+cv.error.10 <- rep(0, 10)
+for (i in 1:10) {
+  fit <- glm(nox ~ poly(dis, i), data = Boston)
+  cv.error.10[i] <- round(cv.glm(Boston, fit, K = 10)$delta[1], 4)
+}
+cv.deg <- which.min(cv.error.10)
+t(data.frame(Degree = 1:10, MSE = cv.error.10))
+```
+
+As seen, a polynomial of degree `r cv.deg` returns a best fit, which is similar to what was returned via the MSE approach.
+
+***
+
+**(d)  Regression spline at $df = 4$**
+
+```{r fig.height=2, fig.width=6, fig.align='center'}
+par(mar=c(4,4,.5,.5))
+library(splines)
+fit <- lm(nox ~ bs(dis, df=4), data = Boston)
+pred <- predict(fit, newdata = list(dis = dis.grid))
+plot(dis, nox, col = 'gray')
+lines(dis.grid, pred, lwd = 2, col = 'blue')
+```
+
+***
+
+**(e)  Regression spline over different $df$**
+
+```{r}
+rss <- rep(0, 10)
+for (i in 1:10) {
+  fit <- lm(nox ~ bs(dis, df=i), data = Boston)
+  pred <- predict(fit, newdata = list(dis = dis.grid))
+  rss[i] <- round((pred - nox)^2,4)
+}
+rss.deg <- which.min(rss)
+t(data.frame(DF = 1:10, RSS = rss))
+```
+
+As seen, a regression spline with $df =$ `r rss.deg` returns a best fit.
+
+```{r fig.height=2, fig.width=6, fig.align='center'}
+par(mar=c(4,4,.5,.5))
+plot(dis, nox, xlim = dislims, cex = .5, col = 'darkgrey')
+for (i in 1:10) {
+  fit <- lm(nox ~ bs(dis, df=i), data = Boston)
+  pred <- predict(fit, newdata = list(dis = dis.grid))
+  lines(dis.grid, pred, lwd = 2, col = mycols[3*i])
+}
+```
+
+***
+
+**(f)  Regression spline with $10$-fold cross-validation**
+
+```{r}
+attach(Wage)
+set.seed(1)
+cv.error.10 <- rep(0, 10)
+for (i in 1:10) {
+  fit <- glm(nox ~ bs(dis, df=i), data = Boston)
+  cv.error.10[i] <- round(cv.glm(Boston, fit, K = 10)$delta[1], 6)
+}
+cv.deg <- which.min(cv.error.10)
+t(data.frame(DF = 1:10, MSE = cv.error.10))
+```
+
+As seen, a regression spline with $df =$ `r cv.deg` returns a best fit.
+
+$\hfill\blacksquare$
+
+\clearpage
+
+# Exercise 10 {-}
+
+This question relates to the `College` data set.
+
+(a)  Split the data into a training set and a test set. Using out-of-state tuition as the response and the other variables as the predictors, perform forward stepwise selection on the training set in order to identify a satisfactory model that uses just a subset of the predictors.
+(b)  Fit a GAM on the training data, using out-of-state tuition as the response and the features selected in the previous step as the predictors. Plot the results, and explain your findings.
+(c)  Evaluate the model obtained on the test set, and explain the results obtained.
+(d)  For which variables, if any, is there evidence of a non-linear relationship with the response?
+
+***
+
+**(a)  Forward stepwise subset selection**
+
+```{r fig.height=2.5, fig.width=7, fig.align='center'}
+library(leaps)
+attach(College)
+set.seed(1)
+idx <- sample(nrow(College), round(nrow(College)*.8,0), replace = FALSE)
+train <- College[idx,]
+test <- College[-idx,]
+regfit.fwd <- regsubsets(Outstate ~ ., data = train, method = 'forward', nvmax = ncol(College))
+reg.fwd.sum <- summary(regfit.fwd)
+par(mfrow=c(1,4), oma = c(0, 0, 2, 0)); par(mar=c(3,5,1,1))
+plot(reg.fwd.sum$rss, xlab = 'Number of Variables', ylab = 'RSS', type = 'l')
+plot(reg.fwd.sum$adjr2, xlab = 'Number of Variables', ylab = 'Adjusted RSq', type = 'l')
+points(which.max(reg.fwd.sum$adjr2), reg.fwd.sum$adjr2[which.max(reg.fwd.sum$adjr2)],
+col = 'red', cex = 2, pch = 20)
+plot(reg.fwd.sum$cp, xlab = 'Number of Variables', ylab = 'Cp', type = 'l')
+points(which.min(reg.fwd.sum$cp), reg.fwd.sum$cp[which.min(reg.fwd.sum$cp)],
+col = 'red', cex = 2, pch = 20)
+plot(reg.fwd.sum$bic, xlab = 'Number of Variables', ylab = 'BIC', type = 'l')
+points(which.min(reg.fwd.sum$bic), reg.fwd.sum$bic[which.min(reg.fwd.sum$bic)],
+col = 'red', cex = 2, pch = 20)
+mtext('Forward method', outer = TRUE, cex = 1.5)
+```
+
+\clearpage
+
+As seen from plots, a reasonable choice subset selection would have $12$ variables + a constant:
+
+```{r}
+as.matrix(coef(regfit.fwd, id = 12))
+```
+
+***
+
+**(b)  GAM fit with selected variables from (a)**
+
+```{r fig.height=4, fig.width=7, fig.align='center'}
+par(mfrow=c(3,4), mar=c(4,3,.5,.5))
+library(gam)
+fit <- gam(Outstate ~ . - Enroll - Top25perc - P.Undergrad - Books - PhD, data = train)
+plot.Gam(fit, se=TRUE, col = 'red')
+```
+
+***
+
+\clearpage
+
+**(c)  Model evaluation**
+
+```{r fig.height=3, fig.width=4, fig.align='center'}
+par(mar=c(4,4,1.5,.5))
+pred <- predict(fit, newdata = test)
+plot(test$Outstate, pred, main = 'Predicted vs. Actual Out-of-State Tuition')
+lines(x = test$Outstate, y = test$Outstate, col = 'blue')
+```
+
+***
+
+**(f)  Linear vs. Non-linear relationship with the response**
+
+```{r}
+summary(fit)
+```
+
+As seen from the summary table, since all the $p$-values are all much smaller than $.05$, all of the $12$ selected variables would be better suited with non-linear functions with respect to the response.
+
+$\hfill\blacksquare$
+
+\clearpage

@@ -1,0 +1,376 @@
+---
+title:  |
+        | ISL - Chapter 7 Lab Tutorials
+        | Moving Beyond Linearity
+subtitle: |
+          | An introduction to Statistical Learning, with Applications in R
+          | - G. James, D. Witten, T. Hastie, R. Tibshirani
+author: "Thu Nguyen"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+   - \usepackage{tcolorbox}
+   - \usepackage{bbm} 
+output:
+  pdf_document:
+    toc: true # table of content true
+    toc_depth: 2  # upto three depths of headings (specified by #, ## and ###)
+    number_sections: true  ## if you want number sections at each table header
+  html_document:
+    df_print: paged
+number_sections: yes
+geometry: margin=2cm
+---
+<style type="text/css">
+  .main-container {
+  max-width: 1200px !important;
+  font-size: 18px;
+  }
+  code.r{
+    font-size: 18px;
+  }
+  pre {
+    font-size: 18px
+  }
+  h1.title {
+    font-size: 30px;
+    color: red;
+  }
+  h1 {
+    font-size: 24px;
+    color: blue;
+  }
+  h2 {
+    font-size: 18px;
+    color: blue;
+  }
+  h3 {
+    font-size: 12px;
+  }
+</style>
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, out.width='1200px', dpi=200)
+options(scipen=999, width = 1200)
+par(mar=c(0,0,1,0))
+```
+
+**Main Contents:**
+
+1.  Polynomial Regression
+2.  Step Functions
+3.  Basis Functions
+4.  Regression Splines
+5.  Smoothing Splines
+6.  Local Regression
+7.  Generalized Additive Models
+
+***
+
+```{r}
+library(ISLR)
+attach(Wage)
+```
+
+
+\newpage
+
+# 7.8.  Lab: Non-linear Modeling {-}
+
+***
+
+## 7.8.1.  Polynomial Regression and Step Functions {-}
+
+### Polynomial Regression {-}
+
+To specify a polynomial such as $f(x) = a_0 + a_1x + a_2x^2 + a_3x^3 + a_4x^4$, in `R`: \texttt{\color{blue}{poly(x,4)}}:
+
+```{r}
+fit <- lm(wage ~ poly(age,4), data = Wage)
+coef(summary(fit))
+```
+
+Other equivalent ways to specify a polynomial in `R`:
+
+```{r}
+fit2 <- lm(wage ~ poly(age,4, raw = T), data = Wage)
+coef(summary(fit2))
+```
+
+Explicitly specifying a polynomial using \texttt{\color{blue}{I()}} in the `formula`:
+
+```{r}
+fit2a <- lm(wage ~ age + I(age^2) + I(age^3) + I(age^4), data = Wage)
+coef(summary(fit2))
+```
+
+Regression and Prediction:
+
+```{r fig.height=3, fig.width=6, fig.align='center'}
+agelims <- range(age)
+age.grid <- seq(from = agelims[1], to = agelims[2])
+preds <- predict(fit, newdata = list(age=age.grid), se=TRUE)
+se.bands <- cbind(preds$fit + 2*preds$se.fit, preds$fit - 2*preds$se.fit)
+
+par(mfrow = c(1,1), mar = c(3,3,0,.5), oma = c(0,0,2,0))
+plot(age, wage, xlim=agelims, cex=.5, col='darkgrey')
+title('Degree-4 Polynomial', outer=T)
+lines(age.grid, preds$fit, lwd=2, col='blue')             # Regression line
+matlines(age.grid, se.bands, lwd=1, col='blue', lty=3)    # Standard Error line
+```
+
+```{r}
+preds2 <- predict(fit2, newdata = list(age=age.grid), se=TRUE)
+print(paste('Difference between with and without raw=T:', max(abs(preds$fit - preds2$fit))))
+```
+
+***
+
+In performing a *polynomial regression*, the problem reduces to the degree of the polynomial, which can be approached by hypothesis tests.
+
+```{r}
+fit.1 <- lm(wage ~ age, data = Wage)
+fit.2 <- lm(wage ~ poly(age,2), data = Wage)
+fit.3 <- lm(wage ~ poly(age,3), data = Wage)
+fit.4 <- lm(wage ~ poly(age,4), data = Wage)
+fit.5 <- lm(wage ~ poly(age,5), data = Wage)
+anova(fit.1, fit.2, fit.3, fit.4, fit.5)
+```
+
+**Interpretation**:
+
+*  $p$-values of comparing Model $1$ vs. Model $2$ is practically $0 \implies$ Model 1 is not sufficient and Model 2 is decidedly better
+*  similarly, between Models $2$ and $3$, Model $3$ is superior
+*  between Models $4$ and $5$, $p$-value is $.37 \implies$ Model 5 is unnecessary
+*  at $p = 05$, either Models $3$ or $4$ is alright.
+
+Alternatively, instead of \texttt{\color{blue}{anova()}}, $p$-value is already encoded in higher order polynomials:
+
+```{r}
+coef(summary(fit.5))
+```
+
+More elaborated models: $wage = f(\text{education}, p(\text{age}))$
+
+```{r}
+fit.1 <- lm(wage ~ education + age, data = Wage)
+fit.2 <- lm(wage ~ education + poly(age,2), data = Wage)
+fit.3 <- lm(wage ~ education + poly(age,3), data = Wage)
+anova(fit.1, fit.2, fit.3)
+```
+
+***
+
+\clearpage
+
+Problem: predicting if an individual eanrs more than $\$250,000$, which is *classification* problem. Before proceeding, we need to create a binary variable for `wage`, by the \texttt{\color{blue}{I()}} function:
+
+```{r}
+fit <- glm(I(wage > 250) ~ poly(age,4), data = Wage, family = binomial)
+preds <- predict(fit, newdata = list(age = age.grid), se=T)
+```
+
+Recall the *logit* equation for *logistic regression*:
+$$ \log \bigg( \frac{\mathbbm{P}(Y=1|X)}{1 - \mathbbm{P}(Y=1|X)}  \bigg) = X\beta 
+\ \ \ 
+\implies 
+\mathbbm{P}(Y=1|X) = \frac{\exp(X\beta)}{1 + \exp(X\beta)} $$
+
+```{r}
+pfit <- exp(preds$fit) / (1 + exp(preds$fit))                  # transformation
+se.bands.logit <- cbind(preds$fit + 2*preds$se.fit, preds$fit - 2*preds$se.fit)
+se.bands <- exp(se.bands.logit) / (1 + exp(se.bands.logit))    # transformatino
+preds <- predict(fit, newdata = list(age = age.grid), type = 'response', se=T)
+```
+
+When plotting, to prevent points close together from overlapping each other, use \texttt{\color{blue}{jitter()}}:
+
+```{r fig.height=2, fig.width=5, fig.align='center'}
+par(mar=c(4,4,0.5,0.5))
+plot(age, I(wage > 250), xlim = agelims, type = 'n', ylim = c(0,2))
+points(jitter(age), I((wage>250)/5), cex=.5, pch='l', col = 'darkgrey')
+lines(age.grid, pfit, lwd = 2, col = 'blue')
+matlines(age.grid, se.bands, lwd = 1, col = 'blue', lty = 3)
+```
+
+***
+
+### Step Functions {-}
+
+```{r}
+fit <- lm(wage ~ cut(age,4), data = Wage)     # cut(age,4) breaks age into 4 equal baskets
+coef(summary(fit))
+```
+
+***
+
+\clearpage
+
+## 7.8.2.  Splines {-}
+
+To fit *regression splines*, we use \texttt{\color{blue}{splines}} package. To create a matrix of basis functions: \texttt{\color{blue}{bs()}}, within which, to specify `knots`: \texttt{\color{blue}{knots = c()}}. By default, *cubic splines* are created. 
+
+```{r fig.height=3, fig.width=6, fig.align='center'}
+par(mar=c(4,4,.5,.5))
+library(splines)
+fit <- lm(wage ~ bs(age, knots = c(25,40,60)), data = Wage)
+pred <- predict(fit, newdata = list(age = age.grid), se=T)
+plot(age, wage, col = 'gray')
+lines(age.grid, pred$fit, lwd = 2)
+lines(age.grid, pred$fit + 2*pred$se, lty = 'dashed')
+lines(age.grid, pred$fit - 2*pred$se, lty = 'dashed')
+```
+
+```{r}
+print(paste('Degree of freedom from explicitly specified knots above:', dim(bs(age, knots = c(25,40,60)))[2]))
+
+```
+
+Alternatively, if $df = 6$ is specified instead of `knots`, `R` will choose the knots:
+
+```{r}
+attr(bs(age, df = 6), 'knots')
+```
+
+Alternatively, to fit a *natural spline*: \texttt{\color{blue}{ns()}}:
+
+```{r fig.height=3, fig.width=6, fig.align='center'}
+par(mar=c(4,4,.5,.5))
+fit2 <- lm(wage ~ ns(age, df = 4), data = Wage)              # fit using natural spline, df = 4
+pred2 <- predict(fit2, newdata = list(age = age.grid), se=T)
+plot(age, wage, col = 'gray')
+lines(age.grid, pred$fit, lwd = 2)
+lines(age.grid, pred$fit + 2*pred$se, lty = 'dashed')
+lines(age.grid, pred$fit - 2*pred$se, lty = 'dashed')
+lines(age.grid, pred2$fit, col = 'red', lwd = 2)
+```
+
+***
+
+### Smoothing Spline {-}
+
+To fit a *smoothing spline*: we use \texttt{\color{blue}{smooth.spline()}}:
+
+```{r fig.height=3, fig.width=6, fig.align='center'}
+par(mar=c(4,4,1.5,.5))
+plot(age, wage, xlim = agelims, cex = .5, col = 'darkgrey')
+title('Smoothing Spline')
+fit <- smooth.spline(age, wage, df = 16)                   # specify df
+fit2 <- smooth.spline(age, wage, cv = TRUE)                # specify Cross-validation
+lines(fit, col = 'red', lwd = 2)
+lines(fit2, col = 'blue', lwd = 2)
+legend('topright', legend = c('16 DF', '6.8 DF'), col = c('red', 'blue'), lty=1, lwd=2, cex=.8)
+```
+
+***
+
+### Local Regression {-}
+
+To fit a *local regression*: we use \texttt{\color{blue}{loess()}}, to specify the `percentage` of observations for each neighborhood, like $20\%$ \texttt{\color{blue}{span = .2}}:
+
+```{r fig.height=3, fig.width=6, fig.align='center'}
+par(mar=c(4,4,1.5,.5))
+plot(age, wage, xlim = agelims, cex = .5, col = 'darkgrey')
+title('Local Regression')
+fit <- loess(wage ~ age, span = .2, data = Wage)
+fit2 <- loess(wage ~ age, span = .5, data = Wage)
+lines(age.grid, predict(fit, data.frame(age = age.grid)), col = 'red', lwd = 2)
+lines(age.grid, predict(fit2, data.frame(age = age.grid)), col = 'blue', lwd = 2)
+legend('topright', legend = c('Span = .2', 'Span = .5'), col = c('red', 'blue'), lty=1, lwd=2, cex=.8)
+```
+
+***
+
+\clearpage
+
+## 7.8.3.  Generalized Additive Models {-}
+
+Goal: fitting a GAM: $\text{wage} = f(\text{education}, ns(\text{year}, d = 4), ns(\text{age}, d = 5)$:
+
+```{r}
+gam1 <- lm(wage ~ ns(year,4) + ns(age,5) + education, data = Wage)
+```
+
+To fit more GAM using more general basis functions, we use \texttt{\color{blue}{gam}} package, the function \texttt{\color{blue}{gam()}}. To specify a smoothing spline, use \texttt{\color{blue}{s()}}:
+
+```{r fig.height=2, fig.width=7, fig.align='center'}
+par(mfrow=c(1,3), mar=c(4,4,2,.5))
+library(gam)
+gam.m3 <- gam(wage ~ s(year, 4) + s(age, 5) + education, data = Wage)
+plot(gam.m3, se=TRUE, col = 'blue')
+```
+
+```{r fig.height=2, fig.width=7, fig.align='center'}
+par(mfrow=c(1,3), mar=c(4,4,2,.5))
+plot.Gam(gam1, se=TRUE, col = 'red')
+```
+
+***
+
+*Problem*: choosing the best model between:
+
+*  Model 1 $\mathcal{M}_1$: GAM without `year`
+*  Model 2 $\mathcal{M}_2$: GAM with a *linear* function of `year`
+*  Model 3 $\mathcal{M}_3$: GAM with a *spline* function of `year`
+
+```{r}
+gam.m1 <- gam(wage ~ s(age,5) + education, data = Wage)
+gam.m2 <- gam(wage ~ year + s(age,5) + education, data = Wage)
+anova(gam.m1, gam.m2, gam.m3, test = 'F')
+```
+
+**Interpretation**: evidience that $\mathcal{M}_2$ is better than $\mathcal{M}_1$ but $mathcal{M}_2$ and $\mathcal{M}_3$ are not significantly different $\implies \mathcal{M}_2$ is preferred.
+
+```{r}
+summary(gam.m3)
+```
+
+**Interpretation**: at the `ANOVA for Nonparametric Effects` from summary table above:
+
+*  $p$-value for `age` and `year` is of $H_0$: linear relationship vs. $H_1$: non-linear
+*  $p = .3537$ indicates linear function is enough for `year`
+*  $p \approx 0$ indicates a non-linear function is preferred for `age`
+
+```{r}
+preds <- predict(gam.m2, newdata = Wage)
+```
+
+***
+
+### Local Regression {-}
+
+Alternatively, to fit a *local regression*, \texttt{\color{blue}{lo()}}:
+
+```{r fig.height=2, fig.width=7, fig.align='center'}
+par(mfrow=c(1,3), mar=c(4,4,2,.5))
+gam.lo <- gam(wage ~ s(year, df=4) + lo(age, span=.7) + education, data = Wage)
+plot.Gam(gam.lo, se=TRUE, col = 'green')
+```
+
+```{r fig.height=3, fig.width=6, fig.align='center'}
+par(mfrow=c(1,2), mar=c(4,4,2,.5))
+gam.lo.i <- gam(wage ~ lo(year, age, span = .5) + education, data = Wage)
+library(akima)
+plot(gam.lo.i)
+```
+
+To fit a *logistic regression GAM*:
+
+```{r fig.height=2, fig.width=7, fig.align='center'}
+par(mfrow=c(1,3), mar=c(4,4,2,.5))
+gam.lr <- gam(I(wage>250) ~ year + s(age,df=5) + education, family = binomial, data = Wage)
+plot(gam.lr, se=T, col = 'green')
+```
+
+```{r}
+table(education, I(wage>250))
+```
+
+```{r fig.height=2, fig.width=7, fig.align='center'}
+par(mfrow=c(1,3), mar=c(4,4,2,.5))
+gam.lr.s <- gam(I(wage>250) ~ year + s(age,df=5) + education, family = binomial, 
+                data = Wage, subset = (education != '1.  < HS Grad'))
+plot(gam.lr.s, se=T, col = 'green')
+```
+
+***
